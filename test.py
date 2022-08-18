@@ -27,10 +27,10 @@ model_names = sorted(
 
 
 def build_model() -> nn.Module:
-    googlenet_model = model.__dict__[config.model_arch_name](num_classes=config.model_num_classes)
-    googlenet_model = googlenet_model.to(device=config.device, memory_format=torch.channels_last)
+    xception_model = model.__dict__[config.model_arch_name](num_classes=config.model_num_classes)
+    xception_model = xception_model.to(device=config.device, memory_format=torch.channels_last)
 
-    return googlenet_model
+    return xception_model
 
 
 def load_dataset() -> CUDAPrefetcher:

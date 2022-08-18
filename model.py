@@ -18,48 +18,54 @@ from torch import Tensor
 from torch import nn
 
 __all__ = [
-    "InceptionV4", "InceptionV4ResNetV2",
-    "BasicConv2d", "ReductionA",
-    "InceptionV4Stem", "InceptionA", "InceptionResNetB", "ReductionResNetB", "InceptionC",
-    "InceptionV4ResNetStem", "InceptionResNetA", "InceptionResNetB", "ReductionResNetB", "InceptionResNetC",
-    "inception_v4",
+    "Xception",
+    "SeparableConv2d", "XceptionBlock",
+    "xception",
 ]
 
 
-class InceptionV4(nn.Module):
+class Xception(nn.Module):
 
     def __init__(
             self,
-            k: int = 192,
-            l: int = 224,
-            m: int = 256,
-            n: int = 384,
             num_classes: int = 1000,
     ) -> None:
-        super(InceptionV4, self).__init__()
-        self.features = nn.Sequential(
-            InceptionV4Stem(3),
-            InceptionA(384),
-            InceptionA(384),
-            InceptionA(384),
-            InceptionA(384),
-            ReductionA(384, k, l, m, n),
-            InceptionB(1024),
-            InceptionB(1024),
-            InceptionB(1024),
-            InceptionB(1024),
-            InceptionB(1024),
-            InceptionB(1024),
-            InceptionB(1024),
-            ReductionB(1024),
-            InceptionC(1536),
-            InceptionC(1536),
-            InceptionC(1536),
-        )
+        super(Xception, self).__init__()
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=(3, 3), stride=(2, 2), padding=(0, 0), bias=False)
+        self.bn1 = nn.BatchNorm2d(32)
+        self.relu1 = nn.ReLU(True)
+
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=(3, 3), stride=(1, 1), padding=(0, 0), bias=False)
+        self.bn2 = nn.BatchNorm2d(64)
+        self.relu2 = nn.ReLU(True)
+
+        self.block1 = XceptionBlock(64, 128, 2, False, True, 2)
+        self.block2 = XceptionBlock(128, 256, 2, True, True, 2)
+        self.block3 = XceptionBlock(256, 728, 2, True, True, 2)
+
+        self.block4 = XceptionBlock(728, 728, 1, True, True, 3)
+        self.block5 = XceptionBlock(728, 728, 1, True, True, 3)
+        self.block6 = XceptionBlock(728, 728, 1, True, True, 3)
+        self.block7 = XceptionBlock(728, 728, 1, True, True, 3)
+
+        self.block8 = XceptionBlock(728, 728, 1, True, True, 3)
+        self.block9 = XceptionBlock(728, 728, 1, True, True, 3)
+        self.block10 = XceptionBlock(728, 728, 1, True, True, 3)
+        self.block11 = XceptionBlock(728, 728, 1, True, True, 3)
+
+        self.block12 = XceptionBlock(728, 1024, 2, True, False, 2)
+
+        self.conv3 = SeparableConv2d(1024, 1536, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        self.bn3 = nn.BatchNorm2d(1536)
+        self.relu3 = nn.ReLU(inplace=True)
+
+        # do relu here
+        self.conv4 = SeparableConv2d(1536, 2048, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        self.bn4 = nn.BatchNorm2d(2048)
+        self.relu4 = nn.ReLU(True)
 
         self.global_average_pooling = nn.AdaptiveAvgPool2d((1, 1))
-
-        self.linear = nn.Linear(1536, num_classes)
+        self.fc = nn.Linear(2048, num_classes)
 
         # Initialize neural network weights
         self._initialize_weights()
@@ -71,10 +77,38 @@ class InceptionV4(nn.Module):
 
     # Support torch.script function
     def _forward_impl(self, x: Tensor) -> Tensor:
-        out = self.features(x)
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu1(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.relu2(out)
+
+        out = self.block1(out)
+        out = self.block2(out)
+        out = self.block3(out)
+        out = self.block4(out)
+        out = self.block5(out)
+        out = self.block6(out)
+        out = self.block7(out)
+        out = self.block8(out)
+        out = self.block9(out)
+        out = self.block10(out)
+        out = self.block11(out)
+        out = self.block12(out)
+
+        out = self.conv3(out)
+        out = self.bn3(out)
+        out = self.relu3(out)
+
+        out = self.conv4(out)
+        out = self.bn4(out)
+        out = self.relu4(out)
+
         out = self.global_average_pooling(out)
         out = torch.flatten(out, 1)
-        out = self.linear(out)
+        out = self.fc(out)
 
         return out
 
@@ -88,510 +122,86 @@ class InceptionV4(nn.Module):
                 nn.init.constant_(module.bias, 0)
 
 
-class InceptionV4ResNetV2(nn.Module):
-
-    def __init__(
-            self,
-            k: int = 192,
-            l: int = 224,
-            m: int = 256,
-            n: int = 384,
-            num_classes: int = 1000,
-    ) -> None:
-        super(InceptionV4ResNetV2, self).__init__()
-        self.features = nn.Sequential(
-            InceptionV4ResNetStem(3),
-            InceptionResNetA(320, 0.17),
-            InceptionResNetA(320, 0.17),
-            InceptionResNetA(320, 0.17),
-            InceptionResNetA(320, 0.17),
-            InceptionResNetA(320, 0.17),
-            InceptionResNetA(320, 0.17),
-            InceptionResNetA(320, 0.17),
-            InceptionResNetA(320, 0.17),
-            InceptionResNetA(320, 0.17),
-            InceptionResNetA(320, 0.17),
-            ReductionA(320, k, l, m, n),
-            InceptionResNetB(1088, 0.10),
-            InceptionResNetB(1088, 0.10),
-            InceptionResNetB(1088, 0.10),
-            InceptionResNetB(1088, 0.10),
-            InceptionResNetB(1088, 0.10),
-            InceptionResNetB(1088, 0.10),
-            InceptionResNetB(1088, 0.10),
-            InceptionResNetB(1088, 0.10),
-            InceptionResNetB(1088, 0.10),
-            InceptionResNetB(1088, 0.10),
-            InceptionResNetB(1088, 0.10),
-            InceptionResNetB(1088, 0.10),
-            InceptionResNetB(1088, 0.10),
-            InceptionResNetB(1088, 0.10),
-            InceptionResNetB(1088, 0.10),
-            InceptionResNetB(1088, 0.10),
-            InceptionResNetB(1088, 0.10),
-            InceptionResNetB(1088, 0.10),
-            InceptionResNetB(1088, 0.10),
-            InceptionResNetB(1088, 0.10),
-            ReductionResNetB(1088),
-            InceptionResNetC(2080, 0.20, True),
-            InceptionResNetC(2080, 0.20, True),
-            InceptionResNetC(2080, 0.20, True),
-            InceptionResNetC(2080, 0.20, True),
-            InceptionResNetC(2080, 0.20, True),
-            InceptionResNetC(2080, 0.20, True),
-            InceptionResNetC(2080, 0.20, True),
-            InceptionResNetC(2080, 0.20, True),
-            InceptionResNetC(2080, 0.20, True),
-            InceptionResNetC(2080, 0.20, False),
-        )
-
-        self.conv = BasicConv2d(2080, 1536, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0))
-
-        self.global_average_pooling = nn.AdaptiveAvgPool2d((1, 1))
-
-        self.linear = nn.Linear(1536, num_classes)
-
-        # Initialize neural network weights
-        self._initialize_weights()
-
-    def forward(self, x: Tensor) -> Tensor:
-        out = self._forward_impl(x)
-
-        return out
-
-    # Support torch.script function
-    def _forward_impl(self, x: Tensor) -> Tensor:
-        out = self.features(x)
-        out = self.conv(out)
-        out = self.global_average_pooling(out)
-        out = torch.flatten(out, 1)
-        out = self.linear(out)
-
-        return out
-
-    def _initialize_weights(self) -> None:
-        for module in self.modules():
-            if isinstance(module, nn.Conv2d) or isinstance(module, nn.Linear):
-                stddev = float(module.stddev) if hasattr(module, "stddev") else 0.1
-                torch.nn.init.trunc_normal_(module.weight, mean=0.0, std=stddev, a=-2, b=2)
-            elif isinstance(module, nn.BatchNorm2d):
-                nn.init.constant_(module.weight, 1)
-                nn.init.constant_(module.bias, 0)
-
-
-class BasicConv2d(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, **kwargs: Any) -> None:
-        super(BasicConv2d, self).__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, bias=False, **kwargs)
-        self.bn = nn.BatchNorm2d(out_channels, eps=0.001)
-        self.relu = nn.ReLU(True)
-
-    def forward(self, x: Tensor) -> Tensor:
-        out = self.conv(x)
-        out = self.bn(out)
-        out = self.relu(out)
-
-        return out
-
-
-class InceptionV4Stem(nn.Module):
+class SeparableConv2d(nn.Module):
     def __init__(
             self,
             in_channels: int,
+            out_channels: int,
+            **kwargs: Any
     ) -> None:
-        super(InceptionV4Stem, self).__init__()
-        self.conv2d_1a_3x3 = BasicConv2d(in_channels, 32, kernel_size=(3, 3), stride=(2, 2), padding=(0, 0))
-
-        self.conv2d_2a_3x3 = BasicConv2d(32, 32, kernel_size=(3, 3), stride=(1, 1), padding=(0, 0))
-        self.conv2d_2b_3x3 = BasicConv2d(32, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-
-        self.mixed_3a_branch_0 = nn.MaxPool2d((3, 3), (2, 2))
-        self.mixed_3a_branch_1 = BasicConv2d(64, 96, kernel_size=(3, 3), stride=(2, 2), padding=(0, 0))
-
-        self.mixed_4a_branch_0 = nn.Sequential(
-            BasicConv2d(160, 64, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-            BasicConv2d(64, 96, kernel_size=(3, 3), stride=(1, 1), padding=(0, 0)),
-        )
-        self.mixed_4a_branch_1 = nn.Sequential(
-            BasicConv2d(160, 64, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-            BasicConv2d(64, 64, kernel_size=(1, 7), stride=(1, 1), padding=(0, 3)),
-            BasicConv2d(64, 64, kernel_size=(7, 1), stride=(1, 1), padding=(3, 0)),
-            BasicConv2d(64, 96, kernel_size=(3, 3), stride=(1, 1), padding=(0, 0))
-        )
-
-        self.mixed_5a_branch_0 = BasicConv2d(192, 192, kernel_size=(3, 3), stride=(2, 2), padding=(0, 0))
-        self.mixed_5a_branch_1 = nn.MaxPool2d((3, 3), (2, 2))
+        super(SeparableConv2d, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels, in_channels, groups=in_channels, bias=False, **kwargs)
+        self.pointwise = nn.Conv2d(in_channels, out_channels, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0),
+                                   bias=False)
 
     def forward(self, x: Tensor) -> Tensor:
-        out = self.conv2d_1a_3x3(x)
-        out = self.conv2d_2a_3x3(out)
-        out = self.conv2d_2b_3x3(out)
-
-        mixed_3a_branch_0 = self.mixed_3a_branch_0(out)
-        mixed_3a_branch_1 = self.mixed_3a_branch_1(out)
-        mixed_3a_out = torch.cat([mixed_3a_branch_0, mixed_3a_branch_1], 1)
-
-        mixed_4a_branch_0 = self.mixed_4a_branch_0(mixed_3a_out)
-        mixed_4a_branch_1 = self.mixed_4a_branch_1(mixed_3a_out)
-        mixed_4a_out = torch.cat([mixed_4a_branch_0, mixed_4a_branch_1], 1)
-
-        mixed_5a_branch_0 = self.mixed_5a_branch_0(mixed_4a_out)
-        mixed_5a_branch_1 = self.mixed_5a_branch_1(mixed_4a_out)
-        mixed_5a_out = torch.cat([mixed_5a_branch_0, mixed_5a_branch_1], 1)
-
-        return mixed_5a_out
-
-
-class InceptionV4ResNetStem(nn.Module):
-    def __init__(
-            self,
-            in_channels: int,
-    ) -> None:
-        super(InceptionV4ResNetStem, self).__init__()
-        self.features = nn.Sequential(
-            BasicConv2d(in_channels, 32, kernel_size=(3, 3), stride=(2, 2), padding=(0, 0)),
-            BasicConv2d(32, 32, kernel_size=(3, 3), stride=(1, 1), padding=(0, 0)),
-            BasicConv2d(32, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
-            nn.MaxPool2d((3, 3), (2, 2)),
-            BasicConv2d(64, 80, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-            BasicConv2d(80, 192, kernel_size=(3, 3), stride=(1, 1), padding=(0, 0)),
-            nn.MaxPool2d((3, 3), (2, 2)),
-        )
-        self.branch_0 = BasicConv2d(192, 96, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0))
-        self.branch_1 = nn.Sequential(
-            BasicConv2d(192, 48, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-            BasicConv2d(48, 64, kernel_size=(5, 5), stride=(1, 1), padding=(2, 2)),
-        )
-        self.branch_2 = nn.Sequential(
-            BasicConv2d(192, 64, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-            BasicConv2d(64, 96, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
-            BasicConv2d(96, 96, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
-        )
-        self.branch_3 = nn.Sequential(
-            nn.AvgPool2d(3, stride=1, padding=1, count_include_pad=False),
-            BasicConv2d(192, 64, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-        )
-
-    def forward(self, x):
-        features = self.features(x)
-        branch_0 = self.branch_0(features)
-        branch_1 = self.branch_1(features)
-        branch_2 = self.branch_2(features)
-        branch_3 = self.branch_3(features)
-
-        out = torch.cat([branch_0, branch_1, branch_2, branch_3], 1)
+        out = self.conv1(x)
+        out = self.pointwise(out)
 
         return out
 
 
-class InceptionA(nn.Module):
+class XceptionBlock(nn.Module):
     def __init__(
             self,
             in_channels: int,
+            out_channels: int,
+            stride: int,
+            relu_first: bool,
+            grow_first: bool,
+            repeat_times: int,
     ) -> None:
-        super(InceptionA, self).__init__()
-        self.branch_0 = BasicConv2d(in_channels, 96, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0))
-        self.branch_1 = nn.Sequential(
-            BasicConv2d(in_channels, 64, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-            BasicConv2d(64, 96, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
-        )
-        self.branch_2 = nn.Sequential(
-            BasicConv2d(in_channels, 64, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-            BasicConv2d(64, 96, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
-            BasicConv2d(96, 96, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
-        )
-        self.brance_3 = nn.Sequential(
-            nn.AvgPool2d((3, 3), (1, 1), (1, 1), count_include_pad=False),
-            BasicConv2d(384, 96, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0))
-        )
+        super(XceptionBlock, self).__init__()
+        rep = []
+
+        if in_channels != out_channels or stride != 1:
+            self.skip = nn.Conv2d(in_channels, out_channels, kernel_size=(1, 1), stride=(stride, stride),
+                                  padding=(0, 0), bias=False)
+            self.skipbn = nn.BatchNorm2d(out_channels)
+        else:
+            self.skip = None
+
+        mid_channels = in_channels
+        if grow_first:
+            rep.append(nn.ReLU(True))
+            rep.append(SeparableConv2d(in_channels, out_channels, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)))
+            rep.append(nn.BatchNorm2d(out_channels))
+            mid_channels = out_channels
+
+        for _ in range(repeat_times - 1):
+            rep.append(nn.ReLU(True))
+            rep.append(SeparableConv2d(mid_channels, mid_channels, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)))
+            rep.append(nn.BatchNorm2d(mid_channels))
+
+        if not grow_first:
+            rep.append(nn.ReLU(True))
+            rep.append(SeparableConv2d(in_channels, out_channels, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)))
+            rep.append(nn.BatchNorm2d(out_channels))
+
+        if not relu_first:
+            rep = rep[1:]
+        else:
+            rep[0] = nn.ReLU(False)
+
+        if stride != 1:
+            rep.append(nn.MaxPool2d((3, 3), (stride, stride), (1, 1)))
+
+        self.rep = nn.Sequential(*rep)
 
     def forward(self, x: Tensor) -> Tensor:
-        branch_0 = self.branch_0(x)
-        branch_1 = self.branch_1(x)
-        branch_2 = self.branch_2(x)
-        brance_3 = self.brance_3(x)
+        if self.skip is not None:
+            identity = self.skip(x)
+            identity = self.skipbn(identity)
+        else:
+            identity = x
 
-        out = torch.cat([branch_0, branch_1, branch_2, brance_3], 1)
-
-        return out
-
-
-class InceptionResNetA(nn.Module):
-    def __init__(
-            self,
-            in_channels: int,
-            scale_factor: float,
-    ) -> None:
-        super(InceptionResNetA, self).__init__()
-        self.scale_factor = scale_factor
-        self.branch_0 = BasicConv2d(in_channels, 32, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0))
-        self.branch_1 = nn.Sequential(
-            BasicConv2d(in_channels, 32, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-            BasicConv2d(32, 32, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-        )
-        self.branch_2 = nn.Sequential(
-            BasicConv2d(in_channels, 32, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-            BasicConv2d(32, 48, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
-            BasicConv2d(48, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-        )
-        self.conv = nn.Conv2d(128, 320, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0))
-        self.relu = nn.ReLU(True)
-
-    def forward(self, x: Tensor) -> Tensor:
-        branch_0 = self.branch_0(x)
-        branch_1 = self.branch_1(x)
-        branch_2 = self.branch_2(x)
-
-        out = self.conv(torch.cat([branch_0, branch_1, branch_2], 1))
-
-        out = torch.mul(out, self.scale_factor)
-        out = torch.add(out, x)
-        out = self.relu(out)
+        out = self.rep(x)
+        out = torch.add(out, identity)
 
         return out
 
 
-class ReductionA(nn.Module):
-    def __init__(
-            self,
-            in_channels: int,
-            k: int,
-            l: int,
-            m: int,
-            n: int,
-    ) -> None:
-        super(ReductionA, self).__init__()
-        self.branch_0 = BasicConv2d(in_channels, n, kernel_size=(3, 3), stride=(2, 2), padding=(0, 0))
-        self.branch_1 = nn.Sequential(
-            BasicConv2d(in_channels, k, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-            BasicConv2d(k, l, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
-            BasicConv2d(l, m, kernel_size=(3, 3), stride=(2, 2), padding=(0, 0)),
-        )
-        self.branch_2 = nn.MaxPool2d((3, 3), (2, 2))
-
-    def forward(self, x: Tensor) -> Tensor:
-        branch_0 = self.branch_0(x)
-        branch_1 = self.branch_1(x)
-        branch_2 = self.branch_2(x)
-
-        out = torch.cat([branch_0, branch_1, branch_2], 1)
-
-        return out
-
-
-class InceptionB(nn.Module):
-    def __init__(
-            self,
-            in_channels: int,
-    ) -> None:
-        super(InceptionB, self).__init__()
-        self.branch_0 = BasicConv2d(in_channels, 384, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0))
-        self.branch_1 = nn.Sequential(
-            BasicConv2d(in_channels, 192, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-            BasicConv2d(192, 224, kernel_size=(1, 7), stride=(1, 1), padding=(0, 3)),
-            BasicConv2d(224, 256, kernel_size=(7, 1), stride=(1, 1), padding=(3, 0)),
-        )
-        self.branch_2 = nn.Sequential(
-            BasicConv2d(in_channels, 192, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-            BasicConv2d(192, 192, kernel_size=(7, 1), stride=(1, 1), padding=(3, 0)),
-            BasicConv2d(192, 224, kernel_size=(1, 7), stride=(1, 1), padding=(0, 3)),
-            BasicConv2d(224, 224, kernel_size=(7, 1), stride=(1, 1), padding=(3, 0)),
-            BasicConv2d(224, 256, kernel_size=(1, 7), stride=(1, 1), padding=(0, 3)),
-        )
-        self.branch_3 = nn.Sequential(
-            nn.AvgPool2d((3, 3), (1, 1), (1, 1), count_include_pad=False),
-            BasicConv2d(in_channels, 128, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-        )
-
-    def forward(self, x: Tensor) -> Tensor:
-        branch_0 = self.branch_0(x)
-        branch_1 = self.branch_1(x)
-        branch_2 = self.branch_2(x)
-        branch_3 = self.branch_3(x)
-
-        out = torch.cat([branch_0, branch_1, branch_2, branch_3], 1)
-
-        return out
-
-
-class InceptionResNetB(nn.Module):
-    def __init__(
-            self,
-            in_channels: int,
-            scale_factor: float,
-    ) -> None:
-        super(InceptionResNetB, self).__init__()
-        self.scale_factor = scale_factor
-
-        self.branch_0 = BasicConv2d(in_channels, 192, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0))
-        self.branch_1 = nn.Sequential(
-            BasicConv2d(in_channels, 128, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-            BasicConv2d(128, 160, kernel_size=(1, 7), stride=(1, 1), padding=(0, 3)),
-            BasicConv2d(160, 192, kernel_size=(7, 1), stride=(1, 1), padding=(3, 0)),
-        )
-        self.conv = nn.Conv2d(384, 1088, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0))
-        self.relu = nn.ReLU(True)
-
-    def forward(self, x):
-        branch_0 = self.branch_0(x)
-        branch_1 = self.branch_1(x)
-
-        out = self.conv(torch.cat([branch_0, branch_1], 1))
-
-        out = torch.mul(out, self.scale_factor)
-        out = torch.add(out, x)
-        out = self.relu(out)
-
-        return out
-
-
-class ReductionB(nn.Module):
-    def __init__(
-            self,
-            in_channels: int,
-    ) -> None:
-        super(ReductionB, self).__init__()
-        self.branch_0 = nn.Sequential(
-            BasicConv2d(in_channels, 192, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-            BasicConv2d(192, 192, kernel_size=(3, 3), stride=(2, 2), padding=(0, 0)),
-        )
-        self.branch_1 = nn.Sequential(
-            BasicConv2d(in_channels, 256, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-            BasicConv2d(256, 256, kernel_size=(1, 7), stride=(1, 1), padding=(0, 3)),
-            BasicConv2d(256, 320, kernel_size=(7, 1), stride=(1, 1), padding=(3, 0)),
-            BasicConv2d(320, 320, kernel_size=(3, 3), stride=(2, 2), padding=(0, 0)),
-        )
-        self.branch_2 = nn.MaxPool2d((3, 3), (2, 2))
-
-    def forward(self, x: Tensor) -> Tensor:
-        branch_0 = self.branch_0(x)
-        branch_1 = self.branch_1(x)
-        branch_2 = self.branch_2(x)
-
-        out = torch.cat([branch_0, branch_1, branch_2], 1)
-
-        return out
-
-
-class ReductionResNetB(nn.Module):
-    def __init__(
-            self,
-            in_channels: int,
-    ) -> None:
-        super(ReductionResNetB, self).__init__()
-        self.branch_0 = nn.Sequential(
-            BasicConv2d(in_channels, 256, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-            BasicConv2d(256, 384, kernel_size=(3, 3), stride=(2, 2), padding=(0, 0))
-        )
-        self.branch_1 = nn.Sequential(
-            BasicConv2d(in_channels, 256, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-            BasicConv2d(256, 288, kernel_size=(3, 3), stride=(2, 2), padding=(0, 0)),
-        )
-        self.branch_2 = nn.Sequential(
-            BasicConv2d(in_channels, 256, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-            BasicConv2d(256, 288, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
-            BasicConv2d(288, 320, kernel_size=(3, 3), stride=(2, 2), padding=(0, 0))
-        )
-        self.branch_3 = nn.MaxPool2d((3, 3), (2, 2))
-
-    def forward(self, x: Tensor) -> Tensor:
-        branch_0 = self.branch_0(x)
-        branch_1 = self.branch_1(x)
-        branch_2 = self.branch_2(x)
-        branch_3 = self.branch_3(x)
-
-        out = torch.cat([branch_0, branch_1, branch_2, branch_3], 1)
-
-        return out
-
-
-class InceptionC(nn.Module):
-    def __init__(
-            self,
-            in_channels: int,
-    ) -> None:
-        super(InceptionC, self).__init__()
-        self.branch_0 = BasicConv2d(in_channels, 256, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0))
-
-        self.branch_1 = BasicConv2d(in_channels, 384, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0))
-        self.branch_1_1 = BasicConv2d(384, 256, kernel_size=(1, 3), stride=(1, 1), padding=(0, 1))
-        self.branch_1_2 = BasicConv2d(384, 256, kernel_size=(3, 1), stride=(1, 1), padding=(1, 0))
-
-        self.branch_2 = nn.Sequential(
-            BasicConv2d(in_channels, 384, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-            BasicConv2d(384, 448, kernel_size=(3, 1), stride=(1, 1), padding=(1, 0)),
-            BasicConv2d(448, 512, kernel_size=(1, 3), stride=(1, 1), padding=(0, 1)),
-        )
-        self.branch_2_1 = BasicConv2d(512, 256, kernel_size=(1, 3), stride=(1, 1), padding=(0, 1))
-        self.branch_2_2 = BasicConv2d(512, 256, kernel_size=(3, 1), stride=(1, 1), padding=(1, 0))
-
-        self.branch_3 = nn.Sequential(
-            nn.AvgPool2d((3, 3), (1, 1), (1, 1)),
-            BasicConv2d(in_channels, 256, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0))
-        )
-
-    def forward(self, x: Tensor) -> Tensor:
-        branch_0 = self.branch_0(x)
-        branch_1 = self.branch_1(x)
-
-        branch_1_1 = self.branch_1_1(branch_1)
-        branch_1_2 = self.branch_1_2(branch_1)
-        x1 = torch.cat([branch_1_1, branch_1_2], 1)
-
-        branch_2 = self.branch_2(x)
-        branch_2_1 = self.branch_2_1(branch_2)
-        branch_2_2 = self.branch_2_2(branch_2)
-        x2 = torch.cat([branch_2_1, branch_2_2], 1)
-
-        x3 = self.branch_3(x)
-
-        out = torch.cat([branch_0, x1, x2, x3], 1)
-
-        return out
-
-
-class InceptionResNetC(nn.Module):
-    def __init__(
-            self,
-            in_channels: int,
-            scale_factor: float,
-            activation: bool,
-    ) -> None:
-        super(InceptionResNetC, self).__init__()
-        self.scale_factor = scale_factor
-        self.activation = activation
-
-        self.branch_0 = BasicConv2d(in_channels, 192, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0))
-        self.branch_1 = nn.Sequential(
-            BasicConv2d(in_channels, 192, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-            BasicConv2d(192, 224, kernel_size=(1, 3), stride=1, padding=(0, 1)),
-            BasicConv2d(224, 256, kernel_size=(3, 1), stride=1, padding=(1, 0))
-        )
-        self.conv = nn.Conv2d(448, 2080, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0))
-        self.relu = nn.ReLU(True)
-
-    def forward(self, x: Tensor) -> Tensor:
-        branch_0 = self.branch_0(x)
-        branch_1 = self.branch_1(x)
-
-        out = self.conv(torch.cat([branch_0, branch_1], 1))
-
-        out = torch.mul(out, self.scale_factor)
-        out = torch.add(out, x)
-
-        if self.activation:
-            out = self.relu(out)
-
-        return out
-
-
-def inception_v4(**kwargs: Any) -> InceptionV4:
-    model = InceptionV4(k=192, l=224, m=256, n=384, **kwargs)
-
-    return model
-
-
-def inception_v4_resnet_v2(**kwargs: Any) -> InceptionV4:
-    model = InceptionV4ResNetV2(k=256, l=256, m=384, n=384, **kwargs)
+def xception(**kwargs: Any) -> Xception:
+    model = Xception(**kwargs)
 
     return model
